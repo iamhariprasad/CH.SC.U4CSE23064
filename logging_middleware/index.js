@@ -14,29 +14,29 @@ const REGISTER_URL = `${BASE_URL}/register`;
 const AUTH_URL = `${BASE_URL}/auth`;
 
 // valid values
-const VALID_STACKS = ["backend", "frontend"];
-const VALID_LEVELS = ["debug", "info", "warn", "error", "fatal"];
+const ALLOWED_STACKS = ["backend", "frontend"];
+const ALLOWED_LEVELS = ["debug", "info", "warn", "error", "fatal"];
 
-const BACKEND_PACKAGES = [
+const SERVER_PACKAGES = [
   "cache", "controller", "cron_job", "db", "domain",
   "handler", "repository", "route", "service",
   "auth", "config", "middleware", "utils"
 ];
 
-const FRONTEND_PACKAGES = [
+const CLIENT_PACKAGES = [
   "api", "component", "hook", "page", "state", "style",
   "auth", "config", "middleware", "utils"
 ];
 
 // token cache
-let cachedToken = null;
-let tokenExpiry = 0;
+let cachedAuthToken = null;
+let authTokenExpiry = 0;
 
 // load credentials from file
-let credentials = {};
+let currentCredentials = {};
 try {
   const credsPath = join(__dirname, "credentials.json");
-  credentials = JSON.parse(readFileSync(credsPath, "utf-8"));
+  currentCredentials = JSON.parse(readFileSync(credsPath, "utf-8"));
 } catch (err) {
   // credentials not loaded, will need to be set manually
 }
@@ -45,14 +45,14 @@ try {
  * Set credentials manually
  */
 function setCredentials(creds) {
-  credentials = { ...credentials, ...creds };
+  currentCredentials = { ...currentCredentials, ...creds };
 }
 
 /**
  * Register with the evaluation server (one-time only!)
  */
 async function register(details) {
-  const body = {
+  const payload = {
     email: details.email,
     name: details.name,
     mobileNo: details.mobileNo,
@@ -65,12 +65,12 @@ async function register(details) {
     const res = await fetch(REGISTER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
+      body: JSON.stringify(payload)
     });
 
     const data = await res.json();
     if (res.ok) {
-      credentials = {
+      currentCredentials = {
         email: details.email,
         name: details.name,
         rollNo: details.rollNo,
@@ -93,31 +93,31 @@ async function register(details) {
  * Get auth token (caches until expiry)
  */
 async function getToken() {
-  if (cachedToken && Date.now() < tokenExpiry) {
-    return cachedToken;
+  if (cachedAuthToken && Date.now() < authTokenExpiry) {
+    return cachedAuthToken;
   }
 
-  const body = {
-    email: credentials.email,
-    name: credentials.name,
-    rollNo: credentials.rollNo,
-    accessCode: credentials.accessCode,
-    clientID: credentials.clientID,
-    clientSecret: credentials.clientSecret
+  const payload = {
+    email: currentCredentials.email,
+    name: currentCredentials.name,
+    rollNo: currentCredentials.rollNo,
+    accessCode: currentCredentials.accessCode,
+    clientID: currentCredentials.clientID,
+    clientSecret: currentCredentials.clientSecret
   };
 
   try {
     const res = await fetch(AUTH_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
+      body: JSON.stringify(payload)
     });
 
     const data = await res.json();
     if (res.ok && data.access_token) {
-      cachedToken = data.access_token;
-      tokenExpiry = Date.now() + (data.expires_in * 1000) - 300000;
-      return cachedToken;
+      cachedAuthToken = data.access_token;
+      authTokenExpiry = Date.now() + (data.expires_in * 1000) - 300000;
+      return cachedAuthToken;
     } else {
       console.error("[LogMiddleware] Auth failed:", data);
       return null;
@@ -136,17 +136,17 @@ async function getToken() {
  * @param {string} message - log message
  */
 async function Log(stack, level, pkg, message) {
-  if (!VALID_STACKS.includes(stack)) {
+  if (!ALLOWED_STACKS.includes(stack)) {
     console.error(`[LogMiddleware] Invalid stack: "${stack}"`);
     return null;
   }
 
-  if (!VALID_LEVELS.includes(level)) {
+  if (!ALLOWED_LEVELS.includes(level)) {
     console.error(`[LogMiddleware] Invalid level: "${level}"`);
     return null;
   }
 
-  const allowed = stack === "backend" ? BACKEND_PACKAGES : FRONTEND_PACKAGES;
+  const allowed = stack === "backend" ? SERVER_PACKAGES : CLIENT_PACKAGES;
   if (!allowed.includes(pkg)) {
     console.error(`[LogMiddleware] Invalid package: "${pkg}" for stack "${stack}"`);
     return null;
@@ -158,7 +158,7 @@ async function Log(stack, level, pkg, message) {
     return null;
   }
 
-  const body = { stack, level, package: pkg, message };
+  const payload = { stack, level, package: pkg, message };
 
   try {
     const res = await fetch(LOG_URL, {
@@ -167,7 +167,7 @@ async function Log(stack, level, pkg, message) {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${token}`
       },
-      body: JSON.stringify(body)
+      body: JSON.stringify(payload)
     });
 
     const data = await res.json();

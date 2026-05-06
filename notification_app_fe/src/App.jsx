@@ -3,7 +3,7 @@ import { fetchNotifications, Log } from './api.js';
 import './index.css';
 
 // priority weights
-const TYPE_WEIGHT = { Placement: 3, Result: 2, Event: 1 };
+const NOTIFICATION_PRIORITY_WEIGHTS = { Placement: 3, Result: 2, Event: 1 };
 
 function App() {
   const [notifications, setNotifications] = useState([]);
@@ -11,7 +11,7 @@ function App() {
   const [page, setPage] = useState('all'); // 'all' or 'priority'
   const [typeFilter, setTypeFilter] = useState('All');
   const [topN, setTopN] = useState(10);
-  const [readIds, setReadIds] = useState(() => {
+  const [viewedIds, setViewedIds] = useState(() => {
     // persist read state in localStorage
     const saved = localStorage.getItem('readNotifications');
     return saved ? JSON.parse(saved) : [];
@@ -22,8 +22,8 @@ function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('readNotifications', JSON.stringify(readIds));
-  }, [readIds]);
+    localStorage.setItem('readNotifications', JSON.stringify(viewedIds));
+  }, [viewedIds]);
 
   async function loadNotifications() {
     setLoading(true);
@@ -41,23 +41,23 @@ function App() {
   }
 
   function markAsRead(id) {
-    if (!readIds.includes(id)) {
-      setReadIds([...readIds, id]);
+    if (!viewedIds.includes(id)) {
+      setViewedIds([...viewedIds, id]);
       Log("info", "component", `Notification ${id} marked as read`);
     }
   }
 
   function markAllRead() {
     const allIds = notifications.map(n => n.ID);
-    setReadIds(allIds);
+    setViewedIds(allIds);
     Log("info", "component", "All notifications marked as read");
   }
 
   // sort by priority: type weight desc, then timestamp desc
-  function getPriorityList() {
+  function retrievePriorityList() {
     const sorted = [...notifications].sort((a, b) => {
-      const wA = TYPE_WEIGHT[a.Type] || 0;
-      const wB = TYPE_WEIGHT[b.Type] || 0;
+      const wA = NOTIFICATION_PRIORITY_WEIGHTS[a.Type] || 0;
+      const wB = NOTIFICATION_PRIORITY_WEIGHTS[b.Type] || 0;
       if (wA !== wB) return wB - wA;
       return new Date(b.Timestamp) - new Date(a.Timestamp);
     });
@@ -65,25 +65,25 @@ function App() {
   }
 
   // filter by type
-  function getFiltered(list) {
+  function filterNotifications(list) {
     if (typeFilter === 'All') return list;
     return list.filter(n => n.Type === typeFilter);
   }
 
   // get display list based on current page
-  function getDisplayList() {
+  function buildDisplayList() {
     if (page === 'priority') {
-      return getFiltered(getPriorityList());
+      return filterNotifications(retrievePriorityList());
     }
     // all page: sort by timestamp desc
     const sorted = [...notifications].sort(
       (a, b) => new Date(b.Timestamp) - new Date(a.Timestamp)
     );
-    return getFiltered(sorted);
+    return filterNotifications(sorted);
   }
 
-  const displayList = getDisplayList();
-  const unreadCount = notifications.filter(n => !readIds.includes(n.ID)).length;
+  const displayList = buildDisplayList();
+  const unreadCount = notifications.filter(n => !viewedIds.includes(n.ID)).length;
 
   function formatTime(ts) {
     const d = new Date(ts);
@@ -207,7 +207,7 @@ function App() {
       ) : (
         <div className="notification-list">
           {displayList.map((n, idx) => {
-            const isRead = readIds.includes(n.ID);
+            const isRead = viewedIds.includes(n.ID);
             return (
               <div
                 key={n.ID}

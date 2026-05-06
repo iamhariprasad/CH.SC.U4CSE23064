@@ -1,21 +1,21 @@
 // Priority Inbox - Notification Backend
-// Fetches notifications from the evaluation server API and sorts by priority
+// Retrieves notifications from the evaluation server API and orders them by priority
 
 import { Log, getToken } from "../logging_middleware/index.js";
 
-const NOTIFICATION_API = "http://20.207.122.201/evaluation-service/notifications";
+const NOTIFICATIONS_ENDPOINT = "http://20.207.122.201/evaluation-service/notifications";
 
-// priority weights: Placement > Result > Event
-const TYPE_WEIGHTS = {
+// priority mapping: Placement > Result > Event
+const PRIORITY_MAPPING = {
   "Placement": 3,
   "Result": 2,
   "Event": 1
 };
 
 /**
- * Fetch all notifications from the evaluation server
+ * Retrieve all notifications from the evaluation server
  */
-async function fetchNotifications() {
+async function retrieveNotifications() {
   await Log("backend", "info", "service", "Fetching notifications from evaluation server");
 
   const token = await getToken();
@@ -25,7 +25,7 @@ async function fetchNotifications() {
   }
 
   try {
-    const res = await fetch(NOTIFICATION_API, {
+    const res = await fetch(NOTIFICATIONS_ENDPOINT, {
       method: "GET",
       headers: {
         "Authorization": `Bearer ${token}`
@@ -47,13 +47,13 @@ async function fetchNotifications() {
 }
 
 /**
- * Sort notifications by priority (type weight + recency)
+ * Order notifications by priority (type weight + recency)
  * Placement > Result > Event, then by timestamp descending
  */
-function sortByPriority(notifications) {
+function orderNotifications(notifications) {
   return notifications.sort((a, b) => {
-    const weightA = TYPE_WEIGHTS[a.Type] || 0;
-    const weightB = TYPE_WEIGHTS[b.Type] || 0;
+    const weightA = PRIORITY_MAPPING[a.Type] || 0;
+    const weightB = PRIORITY_MAPPING[b.Type] || 0;
 
     // higher weight first
     if (weightA !== weightB) {
@@ -68,24 +68,24 @@ function sortByPriority(notifications) {
 /**
  * Get top N priority notifications
  */
-function getTopN(notifications, n) {
-  const sorted = sortByPriority([...notifications]);
-  return sorted.slice(0, n);
+function extractTopNotifications(notifications, limit) {
+  const sorted = orderNotifications([...notifications]);
+  return sorted.slice(0, limit);
 }
 
 /**
  * Filter notifications by type
  */
-function filterByType(notifications, type) {
+function getNotificationsByType(notifications, type) {
   return notifications.filter(n => n.Type === type);
 }
 
 /**
  * Display notifications in a readable format
  */
-function displayNotifications(notifications, title) {
+function printNotifications(notifications, headerTitle) {
   console.log(`\n${"=".repeat(60)}`);
-  console.log(`  ${title}`);
+  console.log(`  ${headerTitle}`);
   console.log(`${"=".repeat(60)}`);
 
   if (notifications.length === 0) {
@@ -93,12 +93,12 @@ function displayNotifications(notifications, title) {
     return;
   }
 
-  notifications.forEach((n, i) => {
-    console.log(`\n  #${i + 1}`);
-    console.log(`  ID:        ${n.ID}`);
-    console.log(`  Type:      ${n.Type}`);
-    console.log(`  Message:   ${n.Message}`);
-    console.log(`  Timestamp: ${n.Timestamp}`);
+  notifications.forEach((item, index) => {
+    console.log(`\n  #${index + 1}`);
+    console.log(`  ID:        ${item.ID}`);
+    console.log(`  Type:      ${item.Type}`);
+    console.log(`  Message:   ${item.Message}`);
+    console.log(`  Timestamp: ${item.Timestamp}`);
   });
 
   console.log(`\n  Total: ${notifications.length}`);
@@ -110,30 +110,30 @@ async function main() {
   await Log("backend", "info", "controller", "Priority Inbox application starting");
 
   // fetch notifications
-  const notifications = await fetchNotifications();
+  const allNotifications = await retrieveNotifications();
 
-  if (notifications.length === 0) {
+  if (allNotifications.length === 0) {
     await Log("backend", "warn", "controller", "No notifications received from API");
     console.log("No notifications found.");
     return;
   }
 
   // display all notifications
-  displayNotifications(notifications, "ALL NOTIFICATIONS");
+  printNotifications(allNotifications, "ALL NOTIFICATIONS");
 
   // display top 10 priority notifications
-  const top10 = getTopN(notifications, 10);
-  displayNotifications(top10, "TOP 10 PRIORITY NOTIFICATIONS");
+  const top10 = extractTopNotifications(allNotifications, 10);
+  printNotifications(top10, "TOP 10 PRIORITY NOTIFICATIONS");
 
   // display by type
-  const placements = filterByType(notifications, "Placement");
-  displayNotifications(placements, "PLACEMENT NOTIFICATIONS");
+  const placements = getNotificationsByType(allNotifications, "Placement");
+  printNotifications(placements, "PLACEMENT NOTIFICATIONS");
 
-  const results = filterByType(notifications, "Result");
-  displayNotifications(results, "RESULT NOTIFICATIONS");
+  const results = getNotificationsByType(allNotifications, "Result");
+  printNotifications(results, "RESULT NOTIFICATIONS");
 
-  const events = filterByType(notifications, "Event");
-  displayNotifications(events, "EVENT NOTIFICATIONS");
+  const events = getNotificationsByType(allNotifications, "Event");
+  printNotifications(events, "EVENT NOTIFICATIONS");
 
   await Log("backend", "info", "controller", "Priority Inbox processing complete");
 }

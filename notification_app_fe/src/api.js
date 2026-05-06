@@ -6,14 +6,14 @@ const LOG_URL = `${BASE_URL}/logs`;
 const AUTH_URL = `${BASE_URL}/auth`;
 const NOTIFICATION_URL = `${BASE_URL}/notifications`;
 
-const VALID_LEVELS = ["debug", "info", "warn", "error", "fatal"];
-const FRONTEND_PACKAGES = [
+const PERMITTED_LEVELS = ["debug", "info", "warn", "error", "fatal"];
+const UI_PACKAGES = [
   "api", "component", "hook", "page", "state", "style",
   "auth", "config", "middleware", "utils"
 ];
 
-let cachedToken = null;
-let tokenExpiry = 0;
+let savedAuthToken = null;
+let authTokenExpiration = 0;
 
 const credentials = {
   email: "ch.sc.u4cse23021@ch.students.amrita.edu",
@@ -25,8 +25,8 @@ const credentials = {
 };
 
 async function getToken() {
-  if (cachedToken && Date.now() < tokenExpiry) {
-    return cachedToken;
+  if (savedAuthToken && Date.now() < authTokenExpiration) {
+    return savedAuthToken;
   }
 
   try {
@@ -38,9 +38,9 @@ async function getToken() {
 
     const data = await res.json();
     if (res.ok && data.access_token) {
-      cachedToken = data.access_token;
-      tokenExpiry = Date.now() + (data.expires_in * 1000) - 300000;
-      return cachedToken;
+      savedAuthToken = data.access_token;
+      authTokenExpiration = Date.now() + (data.expires_in * 1000) - 300000;
+      return savedAuthToken;
     }
     return null;
   } catch (err) {
@@ -50,8 +50,8 @@ async function getToken() {
 }
 
 export async function Log(level, pkg, message) {
-  if (!VALID_LEVELS.includes(level)) return null;
-  if (!FRONTEND_PACKAGES.includes(pkg)) return null;
+  if (!PERMITTED_LEVELS.includes(level)) return null;
+  if (!UI_PACKAGES.includes(pkg)) return null;
 
   const token = await getToken();
   if (!token) return null;
